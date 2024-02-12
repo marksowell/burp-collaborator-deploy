@@ -138,6 +138,31 @@ LATEST_URL=$(curl -si https://portswigger.net/burp/releases/professional/latest 
 VERSION=$(echo $LATEST_URL | grep -oP 'professional-community-\K[\d-]+')
 DOWNLOAD_URL="https://portswigger-cdn.net/burp/releases/download?product=pro&version=${VERSION}&type=Jar"
 
+# Wait for SSH to become ready
+echo "Waiting for VM to be ready for SSH connections..."
+MAX_ATTEMPTS=30
+WAIT_SECONDS=10
+attempt_num=1
+ssh_ready=0
+
+while [ $attempt_num -le $MAX_ATTEMPTS ]; do
+    echo "Attempting to connect to VM ($attempt_num/$MAX_ATTEMPTS)..."
+    if gcloud compute ssh $VM_NAME --zone=$ZONE --command="echo 'SSH is up'" > /dev/null 2>&1; then
+        echo "SSH is ready."
+        ssh_ready=1
+        break
+    else
+        echo "SSH not ready yet. Waiting for $WAIT_SECONDS seconds."
+        sleep $WAIT_SECONDS
+    fi
+    ((attempt_num++))
+done
+
+if [ $ssh_ready -ne 1 ]; then
+    echo "Failed to connect to VM via SSH after $MAX_ATTEMPTS attempts."
+    exit 1
+fi
+
 # Ensure the directory exists
 gcloud compute ssh "$VM_NAME" --zone="$ZONE" --project="$PROJECT_ID" --command="sudo mkdir -p $WORKING_DIR"
 
