@@ -147,7 +147,7 @@ gcloud compute ssh "$VM_NAME" --zone="$ZONE" --project="$PROJECT_ID" --command="
 echo "BurpSuite version ${VERSION} downloaded."
 
 # Update and install Java
-gcloud compute ssh $VM_NAME --zone=$ZONE --command="sudo apt update && sudo apt install -y openjdk-17-jdk"
+gcloud compute ssh $VM_NAME --zone=$ZONE --command="sudo apt update > /dev/null 2>&1 && sudo apt install -y openjdk-17-jdk > /dev/null 2>&1"
 
 echo "Java installed."
 
@@ -200,7 +200,7 @@ EOF
 echo "The metrics page will be located at https://$DOMAIN/$RANDOM_STRING/metrics."
 
 # Write the configuration
-gcloud compute ssh "$VM_NAME" --zone="$ZONE" --command="sudo echo '$CONFIG_CONTENT' > ${WORKING_DIR}/myconfig.config"
+gcloud compute ssh "$VM_NAME" --zone="$ZONE" --command="echo '$CONFIG_CONTENT' | sudo tee ${WORKING_DIR}/myconfig.config > /dev/null"
 
 echo "Configuration file created."
 
@@ -237,12 +237,12 @@ echo "Burp Collaborator service created and started."
 gcloud compute ssh "$VM_NAME" --zone="$ZONE" --project="$PROJECT_ID" --command="sudo mkdir -p $BURP_KEYS_PATH"
 
 # Install Certbot
-gcloud compute ssh $VM_NAME --zone=$ZONE --command="sudo apt update && sudo apt install -y certbot"
+gcloud compute ssh $VM_NAME --zone=$ZONE --command="sudo apt install -y certbot > /dev/null 2>&1"
 
 echo "Certbot installed."
 
 # Install jq
-gcloud compute ssh $VM_NAME --zone=$ZONE --command="sudo apt install -y jq"
+gcloud compute ssh $VM_NAME --zone=$ZONE --command="sudo apt install -y jq > /dev/null 2>&1"
 
 echo "jq installed."
 
@@ -326,7 +326,7 @@ EOF
 )
 
 # Execute the command to create the deploy-hook-script.sh on the VM
-gcloud compute ssh "$VM_NAME" --zone="$ZONE" --command="sudo echo '$DEPLOY_SCRIPT_CONTENT' > ${WORKING_DIR}/deploy-hook-script.sh"
+gcloud compute ssh "$VM_NAME" --zone="$ZONE" --command="echo '$DEPLOY_SCRIPT_CONTENT' | sudo tee ${WORKING_DIR}/deploy-hook-script.sh > /dev/null"
 
 # Ensure hooks scripts are executable
 gcloud compute ssh "$VM_NAME" --zone="$ZONE" --command="sudo chmod +x $AUTH_HOOK_SCRIPT $CLEANUP_HOOK_SCRIPT $DEPLOY_HOOK_SCRIPT"
