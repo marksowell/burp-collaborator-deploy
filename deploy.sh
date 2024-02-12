@@ -41,30 +41,51 @@ fi
 # Variables
 VM_NAME="${DOMAIN%%.*}" # Extracts 'domain' from 'burp.domain.com' or 'domain.com'
 MACHINE_TYPE="e2-micro" # Adjust based on your needs
-IMAGE_FAMILY="debian-11"
+IMAGE_FAMILY="debian-12"
 IMAGE_PROJECT="debian-cloud"
 TAGS="burp-collaborator" # Tag used for targeting firewall rules
-WORKING_DIR="/root/burp/"
-CERT_DIR="/root/burp/keys/"
+WORKING_DIR="/root/burp"
 RANDOM_STRING=$(openssl rand -base64 12 | tr -d '/+' | cut -c1-16)
-LOG_FILE="/var/log/le_renewal.log"
 BURP_KEYS_PATH="/root/burp/keys"
 AUTH_HOOK_SCRIPT="/root/burp/auth-hook-script.sh"
 CLEANUP_HOOK_SCRIPT="/root/burp/cleanup-hook-script.sh"
+DEPLOY_HOOK_SCRIPT="/root/burp/deploy-hook-script.sh"
 LE_PATH="/etc/letsencrypt/live/$DOMAIN"
-PKCS8_KEY_PATH="${BURP_KEYS_PATH}wildcard_${DOMAIN}.key.pkcs8"
-CRT_PATH="${BURP_KEYS_PATH}wildcard_${DOMAIN}.crt"
-INTERMEDIATE_CRT_PATH="${BURP_KEYS_PATH}intermediate.crt"
+PKCS8_KEY_PATH="${BURP_KEYS_PATH}/wildcard_${DOMAIN}.key.pkcs8"
+CRT_PATH="${BURP_KEYS_PATH}/wildcard_${DOMAIN}.crt"
+INTERMEDIATE_CRT_PATH="${BURP_KEYS_PATH}/intermediate.crt"
 
-# Reserve a static external IP address
-gcloud compute addresses create "$VM_NAME"-ip --project="$PROJECT_ID" --region="$REGION" --network-tier=PREMIUM
+# Function to check if VM already exists
+check_vm_exists() {
+    if gcloud compute instances describe "$VM_NAME" --project="$PROJECT_ID" --zone="$ZONE" &>/dev/null; then
+        echo "A VM with the name $VM_NAME already exists in project $PROJECT_ID, zone $ZONE."
+        echo "Please delete the existing VM or use a different name/domain."
+        exit 1
+    else
+        echo "No existing VM found with the name $VM_NAME. Continuing with deployment..."
+    fi
+}
 
-echo "Static external IP address reserved."
+# Check if the VM already exists
+check_vm_exists
+
+# Function to check if the external IP already exists
+check_external_ip() {
+    if ! gcloud compute addresses describe "$VM_NAME-ip" --project="$PROJECT_ID" --region="$REGION" &>/dev/null; then
+        gcloud compute addresses create "$VM_NAME-ip" --project="$PROJECT_ID" --region="$REGION" --network-tier=PREMIUM
+        echo "Static external IP address reserved."
+    else
+        echo "Static external IP address already exists."
+    fi
+}
+
+# Check if the external IP already exists, if not, reserve one
+check_external_ip
 
 # Get the reserved IP address
 EXTERNAL_IP=$(gcloud compute addresses describe "$VM_NAME"-ip --project="$PROJECT_ID" --region="$REGION" --format="get(address)")
 
-echo "Configure ns1.$DOMAIN to point to $EXTERNAL_IP"
+echo "Configure ns1.$DOMAIN and ns2.$DOMAIN to point to $EXTERNAL_IP"
 
 # Create VM instance with the name based on the domain and the reserved IP address
 gcloud compute instances create $VM_NAME \
@@ -74,36 +95,43 @@ gcloud compute instances create $VM_NAME \
     --image-family=$IMAGE_FAMILY \
     --image-project=$IMAGE_PROJECT \
     --tags="$TAGS" \
-    --address="$EXTERNAL_IP"
+    --address="$EXTERNAL_IP" \
+    --disk="name=${VM_NAME}-disk,type=pd-standard,size=30,boot=yes,auto-delete=yes"
 
 echo "VM instance created."
 
-# Define firewall rules
-declare -A FW_RULES=(
-    [allow-dns]="udp:53"
-    [allow-http]="tcp:80"
-    [allow-https]="tcp:443"
-    [allow-smtp]="tcp:25,tcp:587"
-    [allow-smtps]="tcp:465"
-)
+# Check and create firewall rules
+check_and_create_firewall_rules() {
+    declare -A FW_RULES=(
+        [allow-dns]="udp:53"
+        [allow-http]="tcp:80"
+        [allow-https]="tcp:443"
+        [allow-smtp]="tcp:25,tcp:587"
+        [allow-smtps]="tcp:465"
+    )
 
-# Create firewall rules
-for RULE_NAME in "${!FW_RULES[@]}"; do
-    gcloud compute firewall-rules create "$RULE_NAME" \
-        --project="$PROJECT_ID" \
-        --direction=INGRESS \
-        --priority=1000 \
-        --network=default \
-        --action=ALLOW \
-        --rules="${FW_RULES[$RULE_NAME]}" \
-        --source-ranges=0.0.0.0/0 \
-        --target-tags="$TAGS"
-done
+    for RULE_NAME in "${!FW_RULES[@]}"; do
+        if ! gcloud compute firewall-rules describe "$RULE_NAME" --project="$PROJECT_ID" &>/dev/null; then
+            gcloud compute firewall-rules create "$RULE_NAME" \
+                --project="$PROJECT_ID" \
+                --direction=INGRESS \
+                --priority=1000 \
+                --network=default \
+                --action=ALLOW \
+                --rules="${FW_RULES[$RULE_NAME]}" \
+                --source-ranges=0.0.0.0/0 \
+                --target-tags="$TAGS"
+            echo "Firewall rule $RULE_NAME created."
+        else
+            echo "Firewall rule $RULE_NAME already exists."
+        fi
+    done
+}
 
-echo "Firewall rules created."
+# Firewall rule check and creation
+check_and_create_firewall_rules
 
-# Download BurpSuite
-# Get the latest release URL from PortSwigger
+# Get the latest BurpSuite release URL from PortSwigger
 LATEST_URL=$(curl -si https://portswigger.net/burp/releases/professional/latest | grep -i location | awk '{print $2}' | tr -d '\r')
 
 # Extract the version number and construct the download URL
@@ -114,7 +142,7 @@ DOWNLOAD_URL="https://portswigger-cdn.net/burp/releases/download?product=pro&ver
 gcloud compute ssh "$VM_NAME" --zone="$ZONE" --project="$PROJECT_ID" --command="sudo mkdir -p $WORKING_DIR"
 
 # Download the JAR file to the VM
-gcloud compute ssh "$VM_NAME" --zone="$ZONE" --project="$PROJECT_ID" --command="sudo wget -O ${WORKING_DIR}burpsuite_pro.jar '$DOWNLOAD_URL'"
+gcloud compute ssh "$VM_NAME" --zone="$ZONE" --project="$PROJECT_ID" --command="sudo wget -O ${WORKING_DIR}/burpsuite_pro.jar '$DOWNLOAD_URL'"
 
 echo "BurpSuite version ${VERSION} downloaded."
 
@@ -164,20 +192,7 @@ CONFIG_CONTENT=$(cat <<EOF
         "ports": 53
     },
     "logLevel": "INFO",
-    "customDnsRecords" : [
-        {
-            "label" : "_acme-challenge",
-            "type" : "TXT",
-            "record" : "<CERTBOT_CHALLENGE_1>",
-            "ttl" : 60
-        },
-        {
-            "label" : "_acme-challenge",
-            "type" : "TXT",
-            "record" : "<CERTBOT_CHALLENGE_2>",
-            "ttl" : 60
-        }
-    ]
+    "customDnsRecords" : []
 }
 EOF
 )
@@ -185,7 +200,7 @@ EOF
 echo "The metrics page will be located at https://$DOMAIN/$RANDOM_STRING/metrics."
 
 # Write the configuration
-gcloud compute ssh "$VM_NAME" --zone="$ZONE" --command="sudo echo '$CONFIG_CONTENT' > ${WORKING_DIR}myconfig.config"
+gcloud compute ssh "$VM_NAME" --zone="$ZONE" --command="sudo echo '$CONFIG_CONTENT' > ${WORKING_DIR}/myconfig.config"
 
 echo "Configuration file created."
 
@@ -218,15 +233,13 @@ gcloud compute ssh "$VM_NAME" --zone="$ZONE" --command="sudo systemctl daemon-re
 
 echo "Burp Collaborator service created and started."
 
-# Setup Let's Encrypt for the domain
-gcloud compute ssh "$VM_NAME" --zone="$ZONE" --project="$PROJECT_ID" --command="sudo mkdir -p $CERT_DIR"
+# Create directory for keys
+gcloud compute ssh "$VM_NAME" --zone="$ZONE" --project="$PROJECT_ID" --command="sudo mkdir -p $BURP_KEYS_PATH"
 
 # Install Certbot
 gcloud compute ssh $VM_NAME --zone=$ZONE --command="sudo apt update && sudo apt install -y certbot"
 
 echo "Certbot installed."
-
-# Obtain a wildcard certificate
 
 # Install jq
 gcloud compute ssh $VM_NAME --zone=$ZONE --command="sudo apt install -y jq"
@@ -294,46 +307,32 @@ fi
 sudo systemctl restart burp.service
 EOF
 
-# Ensure the log directory exists
-gcloud compute ssh "$VM_NAME" --zone="$ZONE" --command="sudo mkdir -p $(dirname $LOG_FILE) && touch $LOG_FILE"
+# deploy-hook-script.sh content
+DEPLOY_SCRIPT_CONTENT=$(cat <<EOF
+#!/bin/bash
 
-# Define the function to create a certificate
-create_certificate() {
-    # Ensure hooks scripts are executable
-    gcloud compute ssh "$VM_NAME" --zone="$ZONE" --command="sudo chmod +x $AUTH_HOOK_SCRIPT $CLEANUP_HOOK_SCRIPT"
+# Stop the Burp Collaborator service
+sudo systemctl stop burp.service
+    
+# Convert the private key and handle certificates
+sudo openssl pkcs8 -topk8 -inform PEM -outform PEM -in '$LE_PATH/privkey.pem' -out '$BURP_KEYS_PATH/wildcard_${DOMAIN}.key.pkcs8' -nocrypt && sudo cp '$LE_PATH/fullchain.pem' '$BURP_KEYS_PATH/wildcard_${DOMAIN}.crt' && sudo awk '/BEGIN CERTIFICATE/,/END CERTIFICATE/ { if (n++ > 1) print }' '$LE_PATH/fullchain.pem' > '$BURP_KEYS_PATH/intermediate.crt'
+    
+# Start the Burp Collaborator service
+sudo systemctl start burp.service
+    
+# Log completion
+echo "SSL certificate creation and post-processing completed for $DOMAIN."
+EOF
+)
 
-    # Execute the Certbot command to request a new certificate
-    gcloud compute ssh "$VM_NAME" --zone="$ZONE" --command="sudo certbot certonly --manual --preferred-challenges dns --manual-auth-hook \"$AUTH_HOOK_SCRIPT\" --manual-cleanup-hook \"$CLEANUP_HOOK_SCRIPT\" --domains \"$DOMAIN,*.${DOMAIN}\" --no-self-upgrade --non-interactive --agree-tos --email $CERT_EMAIL" | tee -a "$LOG_FILE"
+# Execute the command to create the deploy-hook-script.sh on the VM
+gcloud compute ssh "$VM_NAME" --zone="$ZONE" --command="sudo echo '$DEPLOY_SCRIPT_CONTENT' > ${WORKING_DIR}/deploy-hook-script.sh"
 
-    # Execute post-processing commands conditionally based on certbot success
-    CERT_CREATION_SUCCESS=$(gcloud compute ssh "$VM_NAME" --zone="$ZONE" --command="sudo grep -q 'Congratulations' $LOG_FILE && echo 'success' || echo 'fail'")
-    
-    if [[ "$CERT_CREATION_SUCCESS" == "success" ]]; then
-        # Stop the Burp Collaborator service
-        gcloud compute ssh "$VM_NAME" --zone="$ZONE" --command="sudo systemctl stop burp.service"
-    
-        # Convert the private key and handle certificates
-        gcloud compute ssh "$VM_NAME" --zone="$ZONE" --command="
-            sudo openssl pkcs8 -topk8 -inform PEM -outform PEM -in '$LE_PATH/privkey.pem' -out '$BURP_KEYS_PATH/wildcard_${DOMAIN}.key.pkcs8' -nocrypt &&
-            sudo cp '$LE_PATH/fullchain.pem' '$BURP_KEYS_PATH/wildcard_${DOMAIN}.crt' &&
-            sudo awk '/BEGIN CERTIFICATE/,/END CERTIFICATE/ { if (n++ > 1) print }' '$LE_PATH/fullchain.pem' > '$BURP_KEYS_PATH/intermediate.crt'
-        "
-    
-        # Restart the Burp Collaborator service
-        gcloud compute ssh "$VM_NAME" --zone="$ZONE" --command="sudo systemctl start burp.service"
-    
-        # Log completion
-        gcloud compute ssh "$VM_NAME" --zone="$ZONE" --command="sudo echo 'SSL certificate creation and post-processing completed for $DOMAIN.' | tee -a $LOG_FILE"
-        echo "SSL certificate creation and post-processing completed for $DOMAIN."
-    else
-        # Log the need for manual intervention
-        gcloud compute ssh "$VM_NAME" --zone="$ZONE" --command="sudo echo 'Certificate creation for $DOMAIN may require manual intervention. Check the log for details.' | tee -a $LOG_FILE"
-        echo "Certificate creation for $DOMAIN may require manual intervention. Check the log for details."
-    fi
-}
+# Ensure hooks scripts are executable
+gcloud compute ssh "$VM_NAME" --zone="$ZONE" --command="sudo chmod +x $AUTH_HOOK_SCRIPT $CLEANUP_HOOK_SCRIPT $DEPLOY_HOOK_SCRIPT"
 
-# Call the function to start the certificate creation process
-create_certificate
+# Execute the Certbot command to request a new certificate
+gcloud compute ssh "$VM_NAME" --zone="$ZONE" --command="sudo certbot certonly --manual --preferred-challenges dns --manual-auth-hook \"$AUTH_HOOK_SCRIPT\" --manual-cleanup-hook \"$CLEANUP_HOOK_SCRIPT\" --deploy-hook \"$DEPLOY_HOOK_SCRIPT\" --domains \"$DOMAIN,*.${DOMAIN}\" --no-self-upgrade --non-interactive --agree-tos --email $CERT_EMAIL"
 
 # Command to add SSL configuration to myconfig.config using jq
 ADD_SSL_CONFIG_CMD=$(cat <<EOF
@@ -350,83 +349,4 @@ echo "SSL configuration added to myconfig.config."
 gcloud compute ssh "$VM_NAME" --zone="$ZONE" --command="sudo systemctl restart burp.service"
 
 echo "Restarted burp.service."
-
-# renew_certificates.sh file content
-RENEW_CERTIFICATES_CONTENT=$(cat <<EOF
-#!/bin/bash
-
-# Define your domain
-DOMAIN="$DOMAIN"
-
-# Path to the log file for storing the output of the script
-LOG_FILE="/var/log/le_renewal.log"
-
-# Path to the live Let's Encrypt directory for your domain
-LE_PATH="/etc/letsencrypt/live/$DOMAIN"
-
-# Path to store your keys for Burp Suite
-BURP_KEYS_PATH="/root/burp/keys"
-
-# Path to your auth and cleanup hook scripts
-AUTH_HOOK_SCRIPT="/root/burp/auth-hook-script.sh"
-CLEANUP_HOOK_SCRIPT="/root/burp/cleanup-hook-script.sh"
-
-# Function to run certbot and check the output for renewal action
-renew_certificates() {
-    # Attempt to renew the certificate with hooks for DNS challenges
-    RENEWAL_OUTPUT=$(certbot renew --cert-name "$DOMAIN" --manual-auth-hook "$AUTH_HOOK_SCRIPT" --manual-cleanup-hook "$CLEANUP_HOOK_SCRIPT" --no-self-upgrade --non-interactive 2>&1)
-
-    echo "$RENEWAL_OUTPUT" | tee -a "$LOG_FILE"
-
-    # Check for a success message in the output
-    if echo "$RENEWAL_OUTPUT" | grep -q "Congratulations"; then
-        echo "Certificate renewal attempted for $DOMAIN" | tee -a "$LOG_FILE"
-        
-        # Stop service that is using the SSL certificate
-        systemctl stop burp.service
-        
-        # Convert the private key to PKCS#8 format
-        openssl pkcs8 -topk8 -inform PEM -outform PEM -in "$LE_PATH/privkey.pem" -out "$BURP_KEYS_PATH/wildcard_.${DOMAIN}.key.pkcs8" -nocrypt
-        
-        # Copy and rename the fullchain.pem to the Burp keys directory
-        cp "$LE_PATH/fullchain.pem" "$BURP_KEYS_PATH/wildcard_.${DOMAIN}.crt"
-        
-        # Extract the intermediate certificates and save them
-        awk '/BEGIN CERTIFICATE/,/END CERTIFICATE/ { if (n++ > 1) print }' "$LE_PATH/fullchain.pem" > "$BURP_KEYS_PATH/intermediate.crt"
-        
-        # Restart service that is using the SSL certificate to pick up the changes
-        systemctl start burp.service
-        
-        # Log the completion of the process
-        echo "SSL certificate renewal and post-processing completed for $DOMAIN." | tee -a "$LOG_FILE"
-    elif echo "$RENEWAL_OUTPUT" | grep -q "No renewals were attempted"; then
-        echo "Certificate not due for renewal yet for $DOMAIN" | tee -a "$LOG_FILE"
-    else
-        echo "Certificate renewal for $DOMAIN may require manual intervention. Check the log for details." | tee -a "$LOG_FILE"
-    fi
-}
-
-# Call the function to renew certificates
-renew_certificates
-EOF
-)
-
-# Create renew_certificates.sh
-gcloud compute ssh "$VM_NAME" --zone="$ZONE" --command="sudo echo '$RENEW_CERTIFICATES_CONTENT' > ${WORKING_DIR}renew_certificates.sh"
-
-# Ensure renew_certificates.sh is executable
-gcloud compute ssh "$VM_NAME" --zone="$ZONE" --command="sudo chmod +x ${WORKING_DIR}renew_certificates.sh"
-
-echo "Certificate renewal script created."
-
-# Command to add the cron job
-ADD_CRON_JOB_CMD=$(cat <<'EOF'
-(crontab -l 2>/dev/null; echo "0 2 * * * /root/burp/renew_certificates.sh >> /var/log/le_renewal.log 2>&1") | crontab -
-EOF
-)
-
-# Execute the command on the VM to add the cron job
-gcloud compute ssh "$VM_NAME" --zone="$ZONE" --command="sudo bash -c '$ADD_CRON_JOB_CMD'"
-
-echo "SSL certificate renewal cron job added."
 echo "Deployment script completed."
