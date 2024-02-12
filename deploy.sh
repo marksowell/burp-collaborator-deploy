@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# Exit immediately if a command exits with a non-zero status.
+set -e
+
 # Prompt for the domain name
 read -p "Enter the domain name (e.g., domain.com): " DOMAIN
 if [[ -z "$DOMAIN" ]]; then
