@@ -351,7 +351,6 @@ fi
 # Restart service to apply changes
 sudo systemctl restart burp.service
 EOF
-)
 
 echo "cleanup-hook-script.sh file created."
 
