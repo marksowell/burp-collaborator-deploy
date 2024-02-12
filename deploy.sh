@@ -87,6 +87,9 @@ EXTERNAL_IP=$(gcloud compute addresses describe "$VM_NAME"-ip --project="$PROJEC
 
 echo "Configure ns1.$DOMAIN and ns2.$DOMAIN to point to $EXTERNAL_IP"
 
+# Notify user that VM is being created
+echo "Creating VM, please wait..."
+
 # Create VM instance with the name based on the domain and the reserved IP address
 gcloud compute instances create $VM_NAME \
     --project=$PROJECT_ID \
@@ -167,7 +170,7 @@ fi
 gcloud compute ssh "$VM_NAME" --zone="$ZONE" --project="$PROJECT_ID" --command="sudo mkdir -p $WORKING_DIR"
 
 # Download the JAR file to the VM
-gcloud compute ssh "$VM_NAME" --zone="$ZONE" --project="$PROJECT_ID" --command="sudo wget -O ${WORKING_DIR}/burpsuite_pro.jar '$DOWNLOAD_URL'"
+gcloud compute ssh "$VM_NAME" --zone="$ZONE" --project="$PROJECT_ID" --command="sudo wget -O ${WORKING_DIR}/burpsuite_pro.jar '$DOWNLOAD_URL' > /dev/null 2>&1"
 
 echo "BurpSuite version ${VERSION} downloaded."
 
@@ -286,8 +289,8 @@ gcloud compute ssh $VM_NAME --zone=$ZONE --command="sudo apt install -y jq > /de
 
 echo "jq installed."
 
-# auth-hook-script.sh file content
-AUTH_HOOK_SCRIPT_CONTENT=$(cat <<'EOF'
+# Create the auth-hook-script.sh
+gcloud compute ssh "$VM_NAME" --zone="$ZONE" --command="sudo tee /root/burp/auth-hook-script.sh > /dev/null" << 'EOF'
 #!/bin/bash
 
 # Define paths
@@ -314,15 +317,11 @@ add_dns_challenge
 # Restart service to apply changes
 sudo systemctl restart burp.service
 EOF
-)
-
-# Write the auth-hook-script.sh
-gcloud compute ssh "$VM_NAME" --zone="$ZONE" --command="echo '$AUTH_HOOK_SCRIPT_CONTENT' | sudo tee /root/burp/auth-hook-script.sh > /dev/null"
 
 echo "auth-hook-script.sh file created."
 
-# cleanup-hook-script.sh file content
-CLEANUP_HOOK_SCRIPT_CONTENT=$(cat <<'EOF'
+# Create the cleanup-hook-script.sh
+gcloud compute ssh "$VM_NAME" --zone="$ZONE" --command="sudo tee /root/burp/cleanup-hook-script.sh > /dev/null" << 'EOF'
 #!/bin/bash
 
 # Define paths
@@ -354,20 +353,19 @@ sudo systemctl restart burp.service
 EOF
 )
 
-# Write the cleanup-hook-script.sh
-gcloud compute ssh "$VM_NAME" --zone="$ZONE" --command="echo '$CLEANUP_HOOK_SCRIPT_CONTENT' | sudo tee /root/burp/cleanup-hook-script.sh > /dev/null"
-
 echo "cleanup-hook-script.sh file created."
 
-# deploy-hook-script.sh content
-DEPLOY_SCRIPT_CONTENT=$(cat <<EOF
+# Create the deploy-hook-script.sh
+gcloud compute ssh "$VM_NAME" --zone="$ZONE" --command="sudo tee ${WORKING_DIR}/deploy-hook-script.sh > /dev/null" << EOF
 #!/bin/bash
 
 # Stop the Burp Collaborator service
 sudo systemctl stop burp.service
     
 # Convert the private key and handle certificates
-sudo openssl pkcs8 -topk8 -inform PEM -outform PEM -in '$LE_PATH/privkey.pem' -out '$BURP_KEYS_PATH/wildcard_${DOMAIN}.key.pkcs8' -nocrypt && sudo cp '$LE_PATH/fullchain.pem' '$BURP_KEYS_PATH/wildcard_${DOMAIN}.crt' && sudo awk '/BEGIN CERTIFICATE/,/END CERTIFICATE/ { if (n++ > 1) print }' '$LE_PATH/fullchain.pem' > '$BURP_KEYS_PATH/intermediate.crt'
+sudo openssl pkcs8 -topk8 -inform PEM -outform PEM -in '$LE_PATH/privkey.pem' -out '$BURP_KEYS_PATH/wildcard_${DOMAIN}.key.pkcs8' -nocrypt
+sudo cp '$LE_PATH/fullchain.pem' '$BURP_KEYS_PATH/wildcard_${DOMAIN}.crt'
+sudo awk '/BEGIN CERTIFICATE/,/END CERTIFICATE/ { if (n++ > 1) print }' '$LE_PATH/fullchain.pem' > '$BURP_KEYS_PATH/intermediate.crt'
     
 # Start the Burp Collaborator service
 sudo systemctl start burp.service
@@ -375,10 +373,6 @@ sudo systemctl start burp.service
 # Log completion
 echo "SSL certificate creation and post-processing completed for $DOMAIN."
 EOF
-)
-
-# Execute the command to create the deploy-hook-script.sh on the VM
-gcloud compute ssh "$VM_NAME" --zone="$ZONE" --command="echo '$DEPLOY_SCRIPT_CONTENT' | sudo tee ${WORKING_DIR}/deploy-hook-script.sh > /dev/null"
 
 echo "deploy-hook-script.sh file created."
 
