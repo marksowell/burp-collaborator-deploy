@@ -290,7 +290,7 @@ gcloud compute ssh $VM_NAME --zone=$ZONE --command="sudo apt install -y jq > /de
 echo "jq installed."
 
 # Create the auth-hook-script.sh
-gcloud compute ssh "$VM_NAME" --zone="$ZONE" --command="sudo tee /root/burp/auth-hook-script.sh > /dev/null" << 'EOF'
+gcloud compute ssh "$VM_NAME" --zone="$ZONE" --command="sudo tee ${WORKING_DIR}/auth-hook-script.sh > /dev/null" << 'EOF'
 #!/bin/bash
 
 # Define paths
@@ -321,7 +321,7 @@ EOF
 echo "auth-hook-script.sh file created."
 
 # Create the cleanup-hook-script.sh
-gcloud compute ssh "$VM_NAME" --zone="$ZONE" --command="sudo tee /root/burp/cleanup-hook-script.sh > /dev/null" << 'EOF'
+gcloud compute ssh "$VM_NAME" --zone="$ZONE" --command="sudo tee ${WORKING_DIR}/cleanup-hook-script.sh > /dev/null" << 'EOF'
 #!/bin/bash
 
 # Define paths
