@@ -96,7 +96,7 @@ gcloud compute instances create $VM_NAME \
     --image-project=$IMAGE_PROJECT \
     --tags="$TAGS" \
     --address="$EXTERNAL_IP" \
-    --disk="name=${VM_NAME}-disk,type=pd-standard,size=30,boot=yes,auto-delete=yes"
+    --create-disk="auto-delete=yes,boot=yes,device-name=${VM_NAME}-disk,image=projects/${IMAGE_PROJECT}/global/images/family/${IMAGE_FAMILY},size=30,type=pd-standard"
 
 echo "VM instance created."
 
