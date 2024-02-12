@@ -170,7 +170,7 @@ fi
 gcloud compute ssh "$VM_NAME" --zone="$ZONE" --project="$PROJECT_ID" --command="sudo mkdir -p $WORKING_DIR"
 
 # Download the JAR file to the VM
-gcloud compute ssh "$VM_NAME" --zone="$ZONE" --project="$PROJECT_ID" --command="sudo wget -O ${WORKING_DIR}/burpsuite_pro.jar '$DOWNLOAD_URL' > /dev/null 2>&1"
+gcloud compute ssh "$VM_NAME" --zone="$ZONE" --project="$PROJECT_ID" --command="sudo wget -O ${WORKING_DIR}/burpsuite_pro.jar \"${DOWNLOAD_URL}\" > /dev/null 2>&1"
 
 echo "BurpSuite version ${VERSION} downloaded."
 
