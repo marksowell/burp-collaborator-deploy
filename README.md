@@ -17,9 +17,19 @@ This repository automates the deployment of a Private Burp Collaborator server o
 - A new GCP project created.
 
 ## Deploy Now
-Click the button below to start deploying your Private Burp Collaborator server in Google Cloud Shell. You'll be prompted to enter your domain, project ID, zone, region, and email for SSL certification. Follow the on-screen instructions to complete the deployment. When prompted to configure your DNS settings, refer to [Configuring DNS](https://medium.com/p/e4c98e046c00#a4d2) for an example.  
 
-[![Open in Google Cloud Shell](https://gstatic.com/cloudssh/images/open-btn.svg)](https://console.cloud.google.com/cloudshell/open?git_repo=https://github.com/marksowell/burp-collaborator-deploy&page=shell&open_in_editor=deploy.sh)
+1. Click the button below to start deploying your Private Burp Collaborator server in Google Cloud Shell. You will be prompted to clone the repository.
+
+    [![Open in Google Cloud Shell](https://gstatic.com/cloudssh/images/open-btn.svg)](https://console.cloud.google.com/cloudshell/open?git_repo=https://github.com/marksowell/burp-collaborator-deploy&page=shell)
+
+2. Once Cloud Shell has cloned the repository, change the script's permissions to make it executable, then start the deployment process by executing the script in the Cloud Shell terminal. To do this, you can use the following commands:  
+
+    ```bash
+    chmod +x deploy.sh
+    ./deploy.sh
+    ```
+
+3. Follow the on-screen instructions to enter required information such as your domain name, Google Cloud Project ID, zone, region, and email for SSL certificate registration. When prompted to configure your DNS settings, refer to [Configuring DNS](https://medium.com/p/e4c98e046c00#a4d2) for an example.
 
 
 ## Support and Contributions
