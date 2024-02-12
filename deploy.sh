@@ -111,10 +111,10 @@ VERSION=$(echo $LATEST_URL | grep -oP 'professional-community-\K[\d-]+')
 DOWNLOAD_URL="https://portswigger-cdn.net/burp/releases/download?product=pro&version=${VERSION}&type=Jar"
 
 # Ensure the directory exists
-gcloud compute ssh "$VM_NAME" --zone="$ZONE" --project="$PROJECT_ID" --command="mkdir -p $WORKING_DIR"
+gcloud compute ssh "$VM_NAME" --zone="$ZONE" --project="$PROJECT_ID" --command="sudo mkdir -p $WORKING_DIR"
 
 # Download the JAR file to the VM
-gcloud compute ssh "$VM_NAME" --zone="$ZONE" --project="$PROJECT_ID" --command="wget -O ${WORKING_DIR}burpsuite_pro.jar '$DOWNLOAD_URL'"
+gcloud compute ssh "$VM_NAME" --zone="$ZONE" --project="$PROJECT_ID" --command="sudo wget -O ${WORKING_DIR}burpsuite_pro.jar '$DOWNLOAD_URL'"
 
 echo "BurpSuite version ${VERSION} downloaded."
 
@@ -185,7 +185,7 @@ EOF
 echo "The metrics page will be located at https://$DOMAIN/$RANDOM_STRING/metrics."
 
 # Write the configuration
-gcloud compute ssh "$VM_NAME" --zone="$ZONE" --command="echo '$CONFIG_CONTENT' > ${WORKING_DIR}myconfig.config"
+gcloud compute ssh "$VM_NAME" --zone="$ZONE" --command="sudo echo '$CONFIG_CONTENT' > ${WORKING_DIR}myconfig.config"
 
 echo "Configuration file created."
 
@@ -211,7 +211,7 @@ EOF
 )
 
 # Execute the command to create the service file on the VM
-gcloud compute ssh "$VM_NAME" --zone="$ZONE" --command="$CREATE_SERVICE_CMD"
+gcloud compute ssh "$VM_NAME" --zone="$ZONE" --command="sudo $CREATE_SERVICE_CMD"
 
 # Reload systemd, enable, and start the service
 gcloud compute ssh "$VM_NAME" --zone="$ZONE" --command="sudo systemctl daemon-reload && sudo systemctl enable burp.service && sudo systemctl start burp.service"
@@ -219,7 +219,7 @@ gcloud compute ssh "$VM_NAME" --zone="$ZONE" --command="sudo systemctl daemon-re
 echo "Burp Collaborator service created and started."
 
 # Setup Let's Encrypt for the domain
-gcloud compute ssh "$VM_NAME" --zone="$ZONE" --project="$PROJECT_ID" --command="mkdir -p $CERT_DIR"
+gcloud compute ssh "$VM_NAME" --zone="$ZONE" --project="$PROJECT_ID" --command="sudo mkdir -p $CERT_DIR"
 
 # Install Certbot
 gcloud compute ssh $VM_NAME --zone=$ZONE --command="sudo apt update && sudo apt install -y certbot"
@@ -295,18 +295,18 @@ sudo systemctl restart burp.service
 EOF
 
 # Ensure the log directory exists
-gcloud compute ssh "$VM_NAME" --zone="$ZONE" --command="mkdir -p $(dirname $LOG_FILE) && touch $LOG_FILE"
+gcloud compute ssh "$VM_NAME" --zone="$ZONE" --command="sudo mkdir -p $(dirname $LOG_FILE) && touch $LOG_FILE"
 
 # Define the function to create a certificate
 create_certificate() {
     # Ensure hooks scripts are executable
-    gcloud compute ssh "$VM_NAME" --zone="$ZONE" --command="chmod +x $AUTH_HOOK_SCRIPT $CLEANUP_HOOK_SCRIPT"
+    gcloud compute ssh "$VM_NAME" --zone="$ZONE" --command="sudo chmod +x $AUTH_HOOK_SCRIPT $CLEANUP_HOOK_SCRIPT"
 
     # Execute the Certbot command to request a new certificate
-    gcloud compute ssh "$VM_NAME" --zone="$ZONE" --command="certbot certonly --manual --preferred-challenges dns --manual-auth-hook \"$AUTH_HOOK_SCRIPT\" --manual-cleanup-hook \"$CLEANUP_HOOK_SCRIPT\" --domains \"$DOMAIN,*.${DOMAIN}\" --no-self-upgrade --non-interactive --agree-tos --email $CERT_EMAIL" | tee -a "$LOG_FILE"
+    gcloud compute ssh "$VM_NAME" --zone="$ZONE" --command="sudo certbot certonly --manual --preferred-challenges dns --manual-auth-hook \"$AUTH_HOOK_SCRIPT\" --manual-cleanup-hook \"$CLEANUP_HOOK_SCRIPT\" --domains \"$DOMAIN,*.${DOMAIN}\" --no-self-upgrade --non-interactive --agree-tos --email $CERT_EMAIL" | tee -a "$LOG_FILE"
 
     # Execute post-processing commands conditionally based on certbot success
-    CERT_CREATION_SUCCESS=$(gcloud compute ssh "$VM_NAME" --zone="$ZONE" --command="grep -q 'Congratulations' $LOG_FILE && echo 'success' || echo 'fail'")
+    CERT_CREATION_SUCCESS=$(gcloud compute ssh "$VM_NAME" --zone="$ZONE" --command="sudo grep -q 'Congratulations' $LOG_FILE && echo 'success' || echo 'fail'")
     
     if [[ "$CERT_CREATION_SUCCESS" == "success" ]]; then
         # Stop the Burp Collaborator service
@@ -323,11 +323,11 @@ create_certificate() {
         gcloud compute ssh "$VM_NAME" --zone="$ZONE" --command="sudo systemctl start burp.service"
     
         # Log completion
-        gcloud compute ssh "$VM_NAME" --zone="$ZONE" --command="echo 'SSL certificate creation and post-processing completed for $DOMAIN.' | tee -a $LOG_FILE"
+        gcloud compute ssh "$VM_NAME" --zone="$ZONE" --command="sudo echo 'SSL certificate creation and post-processing completed for $DOMAIN.' | tee -a $LOG_FILE"
         echo "SSL certificate creation and post-processing completed for $DOMAIN."
     else
         # Log the need for manual intervention
-        gcloud compute ssh "$VM_NAME" --zone="$ZONE" --command="echo 'Certificate creation for $DOMAIN may require manual intervention. Check the log for details.' | tee -a $LOG_FILE"
+        gcloud compute ssh "$VM_NAME" --zone="$ZONE" --command="sudo echo 'Certificate creation for $DOMAIN may require manual intervention. Check the log for details.' | tee -a $LOG_FILE"
         echo "Certificate creation for $DOMAIN may require manual intervention. Check the log for details."
     fi
 }
@@ -342,7 +342,7 @@ EOF
 )
 
 # Execute the command on the VM
-gcloud compute ssh "$VM_NAME" --zone="$ZONE" --command="$ADD_SSL_CONFIG_CMD"
+gcloud compute ssh "$VM_NAME" --zone="$ZONE" --command="sudo $ADD_SSL_CONFIG_CMD"
 
 echo "SSL configuration added to myconfig.config."
 
@@ -412,10 +412,10 @@ EOF
 )
 
 # Create renew_certificates.sh
-gcloud compute ssh "$VM_NAME" --zone="$ZONE" --command="echo '$RENEW_CERTIFICATES_CONTENT' > ${WORKING_DIR}renew_certificates.sh"
+gcloud compute ssh "$VM_NAME" --zone="$ZONE" --command="sudo echo '$RENEW_CERTIFICATES_CONTENT' > ${WORKING_DIR}renew_certificates.sh"
 
 # Ensure renew_certificates.sh is executable
-gcloud compute ssh "$VM_NAME" --zone="$ZONE" --command="chmod +x ${WORKING_DIR}renew_certificates.sh"
+gcloud compute ssh "$VM_NAME" --zone="$ZONE" --command="sudo chmod +x ${WORKING_DIR}renew_certificates.sh"
 
 echo "Certificate renewal script created."
 
