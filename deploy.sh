@@ -171,8 +171,17 @@ gcloud compute ssh "$VM_NAME" --zone="$ZONE" --project="$PROJECT_ID" --command="
 
 echo "BurpSuite version ${VERSION} downloaded."
 
-# Update and install Java
-gcloud compute ssh $VM_NAME --zone=$ZONE --command="sudo apt update > /dev/null 2>&1 && sudo apt install -y openjdk-17-jdk > /dev/null 2>&1"
+# Notify user that package update is starting
+echo "Updating package lists, please wait..."
+
+# Update package lists
+gcloud compute ssh $VM_NAME --zone=$ZONE --command="sudo apt update > /dev/null 2>&1"
+
+# Notify user that package update is complete and installation is starting
+echo "Package lists updated. Installing Java, please wait..."
+
+# Install Java
+gcloud compute ssh $VM_NAME --zone=$ZONE --command="sudo apt install -y openjdk-17-jdk > /dev/null 2>&1"
 
 echo "Java installed."
 
@@ -229,9 +238,8 @@ gcloud compute ssh "$VM_NAME" --zone="$ZONE" --command="echo '$CONFIG_CONTENT' |
 
 echo "Configuration file created."
 
-# Command to create burp.service file
-CREATE_SERVICE_CMD=$(cat <<'EOF'
-cat <<'EOT' > /etc/systemd/system/burp.service
+# burp.service file content
+SERVICE_CONTENT=$(cat <<EOF
 [Unit]
 Description=Burp Collaborator
 After=network.target
@@ -246,33 +254,40 @@ WorkingDirectory=/root/burp
 
 [Install]
 WantedBy=multi-user.target
-EOT
 EOF
 )
 
-# Execute the command to create the service file on the VM
-gcloud compute ssh "$VM_NAME" --zone="$ZONE" --command="sudo $CREATE_SERVICE_CMD"
+# Write the configuration
+gcloud compute ssh "$VM_NAME" --zone="$ZONE" --command="echo '$SERVICE_CONTENT' | sudo tee /etc/systemd/system/burp.service > /dev/null"
+
+echo "Burp Collaborator service created."
 
 # Reload systemd, enable, and start the service
 gcloud compute ssh "$VM_NAME" --zone="$ZONE" --command="sudo systemctl daemon-reload && sudo systemctl enable burp.service && sudo systemctl start burp.service"
 
-echo "Burp Collaborator service created and started."
+echo "Burp Collaborator service started."
 
 # Create directory for keys
 gcloud compute ssh "$VM_NAME" --zone="$ZONE" --project="$PROJECT_ID" --command="sudo mkdir -p $BURP_KEYS_PATH"
+
+# Notify user that package update is complete and installation is starting
+echo "Installing Certbot, please wait..."
 
 # Install Certbot
 gcloud compute ssh $VM_NAME --zone=$ZONE --command="sudo apt install -y certbot > /dev/null 2>&1"
 
 echo "Certbot installed."
 
+# Notify user that package update is complete and installation is starting
+echo "Installing jq, please wait..."
+
 # Install jq
 gcloud compute ssh $VM_NAME --zone=$ZONE --command="sudo apt install -y jq > /dev/null 2>&1"
 
 echo "jq installed."
 
-# Create auth-hook-script.sh
-cat << 'EOF' > /root/burp/auth-hook-script.sh
+# auth-hook-script.sh file content
+AUTH_HOOK_SCRIPT_CONTENT=$(cat <<'EOF'
 #!/bin/bash
 
 # Define paths
@@ -299,9 +314,15 @@ add_dns_challenge
 # Restart service to apply changes
 sudo systemctl restart burp.service
 EOF
+)
 
-# Create cleanup-hook-script.sh
-cat << 'EOF' > /root/burp/cleanup-hook-script.sh
+# Write the auth-hook-script.sh
+gcloud compute ssh "$VM_NAME" --zone="$ZONE" --command="echo '$AUTH_HOOK_SCRIPT_CONTENT' | sudo tee /root/burp/auth-hook-script.sh > /dev/null"
+
+echo "auth-hook-script.sh file created."
+
+# cleanup-hook-script.sh file content
+CLEANUP_HOOK_SCRIPT_CONTENT=$(cat <<'EOF'
 #!/bin/bash
 
 # Define paths
@@ -331,6 +352,12 @@ fi
 # Restart service to apply changes
 sudo systemctl restart burp.service
 EOF
+)
+
+# Write the cleanup-hook-script.sh
+gcloud compute ssh "$VM_NAME" --zone="$ZONE" --command="echo '$CLEANUP_HOOK_SCRIPT_CONTENT' | sudo tee /root/burp/cleanup-hook-script.sh > /dev/null"
+
+echo "cleanup-hook-script.sh file created."
 
 # deploy-hook-script.sh content
 DEPLOY_SCRIPT_CONTENT=$(cat <<EOF
@@ -353,20 +380,21 @@ EOF
 # Execute the command to create the deploy-hook-script.sh on the VM
 gcloud compute ssh "$VM_NAME" --zone="$ZONE" --command="echo '$DEPLOY_SCRIPT_CONTENT' | sudo tee ${WORKING_DIR}/deploy-hook-script.sh > /dev/null"
 
+echo "deploy-hook-script.sh file created."
+
 # Ensure hooks scripts are executable
 gcloud compute ssh "$VM_NAME" --zone="$ZONE" --command="sudo chmod +x $AUTH_HOOK_SCRIPT $CLEANUP_HOOK_SCRIPT $DEPLOY_HOOK_SCRIPT"
+
+echo "Hook scripts made executable."
 
 # Execute the Certbot command to request a new certificate
 gcloud compute ssh "$VM_NAME" --zone="$ZONE" --command="sudo certbot certonly --manual --preferred-challenges dns --manual-auth-hook \"$AUTH_HOOK_SCRIPT\" --manual-cleanup-hook \"$CLEANUP_HOOK_SCRIPT\" --deploy-hook \"$DEPLOY_HOOK_SCRIPT\" --domains \"$DOMAIN,*.${DOMAIN}\" --no-self-upgrade --non-interactive --agree-tos --email $CERT_EMAIL"
 
-# Command to add SSL configuration to myconfig.config using jq
-ADD_SSL_CONFIG_CMD=$(cat <<EOF
-jq '. + {"ssl": {"certificateFiles": ["$PKCS8_KEY_PATH", "$CRT_PATH", "$INTERMEDIATE_CRT_PATH"]}}' /root/burp/myconfig.config > /root/burp/myconfig.tmp && mv /root/burp/myconfig.tmp /root/burp/myconfig.config
-EOF
-)
+# Command to modify myconfig.config with SSL configuration using jq and handle permissions correctly
+ADD_SSL_CONFIG_CMD="jq '. + {\"ssl\": {\"certificateFiles\": [\"$PKCS8_KEY_PATH\", \"$CRT_PATH\", \"$INTERMEDIATE_CRT_PATH\"]}}' /root/burp/myconfig.config | sudo tee /root/burp/myconfig.tmp > /dev/null && sudo mv /root/burp/myconfig.tmp /root/burp/myconfig.config"
 
-# Execute the command on the VM
-gcloud compute ssh "$VM_NAME" --zone="$ZONE" --command="sudo $ADD_SSL_CONFIG_CMD"
+# Execute the command on the VM with correct permissions handling
+gcloud compute ssh "$VM_NAME" --zone="$ZONE" --command="$ADD_SSL_CONFIG_CMD"
 
 echo "SSL configuration added to myconfig.config."
 
