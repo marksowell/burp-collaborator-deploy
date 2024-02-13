@@ -55,6 +55,10 @@ PKCS8_KEY_PATH="${BURP_KEYS_PATH}/wildcard_${DOMAIN}.key.pkcs8"
 CRT_PATH="${BURP_KEYS_PATH}/wildcard_${DOMAIN}.crt"
 INTERMEDIATE_CRT_PATH="${BURP_KEYS_PATH}/intermediate.crt"
 
+# Set the gcloud project
+gcloud config set project "$PROJECT_ID"
+echo "Project set to $PROJECT_ID"
+
 # Function to check if VM already exists
 check_vm_exists() {
     if gcloud compute instances describe "$VM_NAME" --project="$PROJECT_ID" --zone="$ZONE" &>/dev/null; then
@@ -142,7 +146,7 @@ check_and_create_firewall_rules() {
 # Firewall rule check and creation
 check_and_create_firewall_rules
 
-# Get the latest BurpSuite release URL from PortSwigger
+# Get the latest Burp Suite release URL from PortSwigger
 LATEST_URL=$(curl -si https://portswigger.net/burp/releases/professional/latest | grep -i location | awk '{print $2}' | tr -d '\r')
 # Extract the version number and construct the download URL
 VERSION=$(echo $LATEST_URL | grep -oP 'professional-community-\K[\d-]+')
@@ -176,10 +180,12 @@ fi
 # Ensure the directory exists
 gcloud compute ssh "$VM_NAME" --zone="$ZONE" --project="$PROJECT_ID" --command="sudo mkdir -p $WORKING_DIR"
 
+echo "Downloading Burp Suite version ${FORMATTED_VERSION}, please wait..."
+
 # Download the JAR file to the VM
 gcloud compute ssh "$VM_NAME" --zone="$ZONE" --project="$PROJECT_ID" --command="sudo wget -O ${WORKING_DIR}/burpsuite_pro.jar \"${DOWNLOAD_URL}\" > /dev/null 2>&1"
 
-echo "BurpSuite version ${FORMATTED_VERSION} downloaded."
+echo "Burp Suite version ${FORMATTED_VERSION} downloaded."
 
 # Notify user that package update is starting
 echo "Updating package lists, please wait..."
@@ -388,6 +394,7 @@ gcloud compute ssh "$VM_NAME" --zone="$ZONE" --command="sudo chmod +x $AUTH_HOOK
 echo "Hook scripts made executable."
 
 # Execute the Certbot command to request a new certificate
+echo "Requesting a new certificate, please wait..."
 gcloud compute ssh "$VM_NAME" --zone="$ZONE" --command="sudo certbot certonly --manual --preferred-challenges dns --manual-auth-hook \"$AUTH_HOOK_SCRIPT\" --manual-cleanup-hook \"$CLEANUP_HOOK_SCRIPT\" --deploy-hook \"$DEPLOY_HOOK_SCRIPT\" --domains \"$DOMAIN,*.${DOMAIN}\" --no-self-upgrade --non-interactive --agree-tos --email $CERT_EMAIL"
 
 # Command to modify myconfig.config with SSL configuration using jq and handle permissions correctly
