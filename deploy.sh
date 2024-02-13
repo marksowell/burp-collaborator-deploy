@@ -59,6 +59,11 @@ INTERMEDIATE_CRT_PATH="${BURP_KEYS_PATH}/intermediate.crt"
 gcloud config set project "$PROJECT_ID"
 echo "Project set to $PROJECT_ID"
 
+# Automatically enable the Compute Engine API if not already enabled
+echo "Checking and enabling Compute Engine API..."
+gcloud services enable compute.googleapis.com --quiet
+echo "Compute Engine API is enabled."
+
 # Function to check if VM already exists
 check_vm_exists() {
     if gcloud compute instances describe "$VM_NAME" --project="$PROJECT_ID" --zone="$ZONE" &>/dev/null; then
