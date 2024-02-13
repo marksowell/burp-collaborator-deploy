@@ -90,41 +90,10 @@ echo "Please update your domain's nameserver records at your registrar to point 
 echo "ns1.$DOMAIN -> $EXTERNAL_IP"
 echo "ns2.$DOMAIN -> $EXTERNAL_IP"
 echo "After updating, DNS changes may take some time to propagate."
-echo "You can verify your nameserver settings by using online tools like Google's Dig (https://toolbox.googleapps.com/apps/dig/) or the command: dig A ns1.$DOMAIN +short"
+echo "For an example please read https://medium.com/@mark-sowell/setting-up-a-private-burp-collaborator-server-on-google-cloud-platform-e4c98e046c00#a4d2"
 
 # Wait for user confirmation to proceed
 read -p "Press enter once you have confirmed that your nameserver records have been updated correctly."
-
-# Function to check DNS resolution
-check_dns_resolution() {
-    echo "Verifying DNS resolution for ns1.$DOMAIN..."
-    resolved_ips=($(dig A ns1."$DOMAIN" +short))
-    for ip in "${resolved_ips[@]}"; do
-        if [[ "$ip" == "$EXTERNAL_IP" ]]; then
-            echo "DNS resolution is correct: ns1.$DOMAIN resolved to $EXTERNAL_IP."
-            return 0
-        fi
-    done
-    echo "DNS resolution is incorrect. Resolved IPs: ${resolved_ips[*]}"
-    return 1
-}
-
-# DNS verification loop
-dns_attempt=0
-dns_max_attempts=10
-while ! check_dns_resolution && [ $dns_attempt -lt $dns_max_attempts ]; do
-    echo "Attempt $((++dns_attempt)) of $dns_max_attempts: DNS changes have not propagated yet."
-    echo "Waiting 30 seconds before trying again..."
-    sleep 30
-done
-
-if [ $dns_attempt -eq $dns_max_attempts ]; then
-    echo "DNS verification failed after $dns_max_attempts attempts."
-    echo "Please verify your nameserver settings and try again."
-    exit 1
-else
-    echo "DNS verification succeeded."
-fi
 
 # Notify user that VM is being created
 echo "Creating VM, please wait..."
