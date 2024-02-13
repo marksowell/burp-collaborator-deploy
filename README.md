@@ -14,7 +14,7 @@ This repository automates the deployment of a Private Burp Collaborator server o
 - A [Google Cloud Platform account](https://cloud.google.com/).
 - Familiarity with GCP services and the command line. For an introduction to GCP, see [GCP Fundamentals](https://cloud.google.com/docs/overview).
 - A registered domain name.
-- A new GCP project created.
+- A new GCP project created with billing enabled.
 
 ## Deploy Now
 
