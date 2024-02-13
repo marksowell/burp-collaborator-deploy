@@ -85,7 +85,46 @@ check_external_ip
 # Get the reserved IP address
 EXTERNAL_IP=$(gcloud compute addresses describe "$VM_NAME"-ip --project="$PROJECT_ID" --region="$REGION" --format="get(address)")
 
-echo "Configure ns1.$DOMAIN and ns2.$DOMAIN to point to $EXTERNAL_IP"
+# Prompt user to update DNS records
+echo "Please update your domain's nameserver records at your registrar to point to the nameservers:"
+echo "ns1.$DOMAIN -> $EXTERNAL_IP"
+echo "ns2.$DOMAIN -> $EXTERNAL_IP"
+echo "After updating, DNS changes may take some time to propagate."
+echo "You can verify your nameserver settings by using online tools like Google's Dig (https://toolbox.googleapps.com/apps/dig/) or the command: dig A ns1.$DOMAIN +short"
+
+# Wait for user confirmation to proceed
+read -p "Press enter once you have confirmed that your nameserver records have been updated correctly."
+
+# Function to check DNS resolution
+check_dns_resolution() {
+    echo "Verifying DNS resolution for ns1.$DOMAIN..."
+    resolved_ips=($(dig A ns1."$DOMAIN" +short))
+    for ip in "${resolved_ips[@]}"; do
+        if [[ "$ip" == "$EXTERNAL_IP" ]]; then
+            echo "DNS resolution is correct: ns1.$DOMAIN resolved to $EXTERNAL_IP."
+            return 0
+        fi
+    done
+    echo "DNS resolution is incorrect. Resolved IPs: ${resolved_ips[*]}"
+    return 1
+}
+
+# DNS verification loop
+dns_attempt=0
+dns_max_attempts=10
+while ! check_dns_resolution && [ $dns_attempt -lt $dns_max_attempts ]; do
+    echo "Attempt $((++dns_attempt)) of $dns_max_attempts: DNS changes have not propagated yet."
+    echo "Waiting 30 seconds before trying again..."
+    sleep 30
+done
+
+if [ $dns_attempt -eq $dns_max_attempts ]; then
+    echo "DNS verification failed after $dns_max_attempts attempts."
+    echo "Please verify your nameserver settings and try again."
+    exit 1
+else
+    echo "DNS verification succeeded."
+fi
 
 # Notify user that VM is being created
 echo "Creating VM, please wait..."
@@ -143,26 +182,25 @@ DOWNLOAD_URL="https://portswigger-cdn.net/burp/releases/download?product=pro&ver
 
 # Wait for SSH to become ready
 echo "Waiting for VM to be ready for SSH connections..."
-MAX_ATTEMPTS=30
-WAIT_SECONDS=10
-attempt_num=1
+ssh_max_attempts=30
+ssh_attempt_num=1
 ssh_ready=0
 
-while [ $attempt_num -le $MAX_ATTEMPTS ]; do
-    echo "Attempting to connect to VM ($attempt_num/$MAX_ATTEMPTS)..."
+while [ $ssh_attempt_num -le $ssh_max_attempts ]; do
+    echo "Attempting to connect to VM ($ssh_attempt_num/$ssh_max_attempts)..."
     if gcloud compute ssh $VM_NAME --zone=$ZONE --command="echo 'SSH is up'" > /dev/null 2>&1; then
         echo "SSH is ready."
         ssh_ready=1
         break
     else
-        echo "SSH not ready yet. Waiting for $WAIT_SECONDS seconds."
-        sleep $WAIT_SECONDS
+        echo "SSH not ready yet. Waiting for 10 seconds."
+        sleep 10
     fi
-    ((attempt_num++))
+    ((ssh_attempt_num++))
 done
 
 if [ $ssh_ready -ne 1 ]; then
-    echo "Failed to connect to VM via SSH after $MAX_ATTEMPTS attempts."
+    echo "Failed to connect to VM via SSH after $ssh_max_attempts attempts."
     exit 1
 fi
 
@@ -384,7 +422,8 @@ echo "Hook scripts made executable."
 gcloud compute ssh "$VM_NAME" --zone="$ZONE" --command="sudo certbot certonly --manual --preferred-challenges dns --manual-auth-hook \"$AUTH_HOOK_SCRIPT\" --manual-cleanup-hook \"$CLEANUP_HOOK_SCRIPT\" --deploy-hook \"$DEPLOY_HOOK_SCRIPT\" --domains \"$DOMAIN,*.${DOMAIN}\" --no-self-upgrade --non-interactive --agree-tos --email $CERT_EMAIL"
 
 # Command to modify myconfig.config with SSL configuration using jq and handle permissions correctly
-ADD_SSL_CONFIG_CMD="sudo sh -c 'jq \". + {\\\"ssl\\\": {\\\"certificateFiles\\\": [\\\"$PKCS8_KEY_PATH\\\", \\\"$CRT_PATH\\\", \\\"$INTERMEDIATE_CRT_PATH\\\"]}}\" /root/burp/myconfig.config > /root/burp/myconfig.tmp && mv /root/burp/myconfig.tmp /root/burp/myconfig.config'"
+
+ADD_SSL_CONFIG_CMD="sudo sh -c 'jq \".eventCapture.ssl = {\\\"certificateFiles\\\": [\\\"$PKCS8_KEY_PATH\\\", \\\"$CRT_PATH\\\", \\\"$INTERMEDIATE_CRT_PATH\\\"]}\" /root/burp/myconfig.config > /root/burp/myconfig.tmp && mv /root/burp/myconfig.tmp /root/burp/myconfig.config'"
 
 # Execute the command on the VM with correct permissions handling
 gcloud compute ssh "$VM_NAME" --zone="$ZONE" --command="$ADD_SSL_CONFIG_CMD"
