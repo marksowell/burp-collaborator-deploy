@@ -18,18 +18,21 @@ This repository automates the deployment of a Private Burp Collaborator server o
 
 ## Deploy Now
 
-1. Click the button below to start deploying your Private Burp Collaborator server in Google Cloud Shell. You will be prompted to clone the repository.
+1. Click the button below to start deploying your Private Burp Collaborator server in Google Cloud Shell. You will be prompted to clone the repository.  
 
-    [![Open in Cloud Shell](https://gstatic.com/cloudssh/images/open-btn.svg)](https://shell.cloud.google.com/cloudshell/editor?cloudshell_git_repo=https://github.com/marksowell/burp-collaborator-deploy.git&show=terminal)
-
-3. Once Cloud Shell has cloned the repository, change the script's permissions to make it executable, then start the deployment process by executing the script in the Cloud Shell terminal. To do this, you can use the following commands:  
-
-    ```bash
-    chmod +x deploy.sh
-    ./deploy.sh
-    ```
-
-4. Follow the on-screen instructions to enter required information such as your domain name, Google Cloud Project ID, zone, region, and email for SSL certificate registration. When prompted to configure your DNS settings, refer to [Configuring DNS](https://medium.com/p/e4c98e046c00#a4d2) for an example.
+   [![Open in Cloud Shell](https://gstatic.com/cloudssh/images/open-btn.svg)](https://shell.cloud.google.com/cloudshell/editor?cloudshell_git_repo=https://github.com/marksowell/burp-collaborator-deploy.git&show=terminal)
+3. Click `Confirm` to clone the repository.
+4. Authorize the gcloud CLI
+   ```bash
+   gcloud auth login
+   ```
+   Follow the browser-based authorization flow to authenticate the account and grant access permissions.
+5. Change the script's permissions to make it executable, then start the deployment process by executing the script in the Cloud Shell terminal.  
+   ```bash
+   chmod +x deploy.sh
+   ./deploy.sh
+   ```
+6. Follow the on-screen instructions to enter required information such as your domain name, Google Cloud Project ID, zone, region, and email for SSL certificate registration. When prompted to configure your DNS settings, refer to [Configuring DNS](https://medium.com/p/e4c98e046c00#a4d2) for an example.
 
 
 ## Support and Contributions
