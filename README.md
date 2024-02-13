@@ -24,7 +24,7 @@ This repository automates the deployment of a Private Burp Collaborator server o
 3. Click `Confirm` to clone the repository.
 4. Authorize the gcloud CLI
    ```bash
-   gcloud auth login
+   gcloud auth login --quiet
    ```
    Follow the browser-based authorization flow to authenticate the account and grant access permissions.
 5. Change the script's permissions to make it executable, then start the deployment process by executing the script in the Cloud Shell terminal.  
