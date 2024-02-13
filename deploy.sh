@@ -384,7 +384,7 @@ echo "Hook scripts made executable."
 gcloud compute ssh "$VM_NAME" --zone="$ZONE" --command="sudo certbot certonly --manual --preferred-challenges dns --manual-auth-hook \"$AUTH_HOOK_SCRIPT\" --manual-cleanup-hook \"$CLEANUP_HOOK_SCRIPT\" --deploy-hook \"$DEPLOY_HOOK_SCRIPT\" --domains \"$DOMAIN,*.${DOMAIN}\" --no-self-upgrade --non-interactive --agree-tos --email $CERT_EMAIL"
 
 # Command to modify myconfig.config with SSL configuration using jq and handle permissions correctly
-ADD_SSL_CONFIG_CMD="jq '. + {\"ssl\": {\"certificateFiles\": [\"$PKCS8_KEY_PATH\", \"$CRT_PATH\", \"$INTERMEDIATE_CRT_PATH\"]}}' /root/burp/myconfig.config | sudo tee /root/burp/myconfig.tmp > /dev/null && sudo mv /root/burp/myconfig.tmp /root/burp/myconfig.config"
+ADD_SSL_CONFIG_CMD="sudo sh -c 'jq \". + {\\\"ssl\\\": {\\\"certificateFiles\\\": [\\\"$PKCS8_KEY_PATH\\\", \\\"$CRT_PATH\\\", \\\"$INTERMEDIATE_CRT_PATH\\\"]}}\" /root/burp/myconfig.config > /root/burp/myconfig.tmp && mv /root/burp/myconfig.tmp /root/burp/myconfig.config'"
 
 # Execute the command on the VM with correct permissions handling
 gcloud compute ssh "$VM_NAME" --zone="$ZONE" --command="$ADD_SSL_CONFIG_CMD"
