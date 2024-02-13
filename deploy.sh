@@ -136,10 +136,10 @@ check_and_create_firewall_rules
 
 # Get the latest BurpSuite release URL from PortSwigger
 LATEST_URL=$(curl -si https://portswigger.net/burp/releases/professional/latest | grep -i location | awk '{print $2}' | tr -d '\r')
-
 # Extract the version number and construct the download URL
 VERSION=$(echo $LATEST_URL | grep -oP 'professional-community-\K[\d-]+')
-DOWNLOAD_URL="https://portswigger-cdn.net/burp/releases/download?product=pro&version=${VERSION}&type=Jar"
+FORMATTED_VERSION=$(echo $VERSION | tr '-' '.')
+DOWNLOAD_URL="https://portswigger-cdn.net/burp/releases/download?product=pro&version=${FORMATTED_VERSION}&type=Jar"
 
 # Wait for SSH to become ready
 echo "Waiting for VM to be ready for SSH connections..."
@@ -172,7 +172,7 @@ gcloud compute ssh "$VM_NAME" --zone="$ZONE" --project="$PROJECT_ID" --command="
 # Download the JAR file to the VM
 gcloud compute ssh "$VM_NAME" --zone="$ZONE" --project="$PROJECT_ID" --command="sudo wget -O ${WORKING_DIR}/burpsuite_pro.jar \"${DOWNLOAD_URL}\" > /dev/null 2>&1"
 
-echo "BurpSuite version ${VERSION} downloaded."
+echo "BurpSuite version ${FORMATTED_VERSION} downloaded."
 
 # Notify user that package update is starting
 echo "Updating package lists, please wait..."
